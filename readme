@@ -1,0 +1,110 @@
+豆瓣电影top250爬虫&统计分析
+目的
+使用python爬虫爬取豆瓣电影top250的电影信息，存入excel和csv文件，并使用matplotlib进行作图分析
+
+参考程序
+import os
+import requests  # 网络请求模块
+from Tools.scripts.generate_re_casefix import alpha
+from lxml import etree  # 数据解析模块
+import pandas as pd  # 数据分析模块快
+from matplotlib import pyplot as plt
+from pandas.core.indexes.api import all_indexes_same
+
+# 支持中文显示
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+
+# 全局变量定义
+excelFileName = "豆瓣电影top250数据.xlsx"
+csvFileName = "豆瓣电影top250数据.csv"
+url="https://movie.douban.com/top250?start=0&filter="
+
+# 请求头信息
+headers = {
+    'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+}
+
+def get_first_text(list): #方括号去除
+    try:
+      return list[0].strip()
+    except:
+      return ""       #防止电影无简介
+
+#pandas 数据导入excel表格
+def getmovie():
+  allin=pd.DataFrame(columns=["序号","标题","链接","导演及演员","评分","评分人数","简介"])
+  urls=['https://movie.douban.com/top250?start={}&filter='.format(str(i*25))for i in range(10)]
+  num=0
+  for url in urls :
+    #print(url)显示跳转的网址
+    res = requests.get(url=url, headers=headers)
+    # print(res.status_code)
+    html = etree.HTML(res.text)  # 将返回的文本加工为可以解析的html
+
+    lis = html.xpath('//*[@id="content"]/div/div[1]/ol/li')  # 获取每个电影的li元素
+
+    #print(len(lis)) 每页电影的数量
+#解析
+    for li in lis :
+      a=get_first_text(li.xpath('./div/div[2]/div[1]/a/span[1]/text()') )#标题的获取
+      b=get_first_text(li.xpath('./div/div[2]/div[1]/a/@href'))#链接的获取
+      c=get_first_text(li.xpath('./div/div[2]/div[2]/p[1]/text()'))#导演及演员的获取
+      d=get_first_text(li.xpath('./div/div[2]/div[2]/div/span[2]/text()'))#评分的获取
+      e=get_first_text(li.xpath('./div/div[2]/div[2]/div/span[4]/text()'))#评分人数的获取
+      f=get_first_text(li.xpath('./div/div[2]/div[2]/p[2]/span/text()'))#简介的获取
+    #c=get_first_text(li.xpath('/text()'))
+      num+=1
+      print(num,a,b,c,d,e,f)
+      allin.loc[len(allin.index)]=[num,a,b,c,d,e,f]
+
+  allin.to_excel("豆瓣电影top250数据可视化.xlsx",sheet_name="豆瓣电影top250数据可视化",na_rep="")
+  allin.to_csv(csvFileName)
+
+def datavisualization():
+    allin = pd.read_csv(filepath_or_buffer=csvFileName)
+    # 1. 画出所有电影评分的饼形图
+    # 计算每个评分的数量（假设评分列名为）
+    rating_counts = allin['评分'].value_counts().sort_index()
+    # 绘制饼图
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.pie(rating_counts, labels=rating_counts.index, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    ax.set_title('豆瓣电影Top 250评分分布')
+    os.makedirs("images", exist_ok=True)
+    plt.savefig('images/豆瓣电影Top 250评分分布.png')
+    plt.show()
+
+    # 2. 绘制评价人数的折线图
+    # 由于你可能有多个电影具有相同的评分，我们可以选择按序号绘制评价人数的变化
+    # 或者，我们可以简单地按评分排序并绘制每个评分的总评价人数
+
+    # 这里我们选择绘制每个评分的总评价人数
+    sorted_ratings = rating_counts.sort_index()
+    # 绘制折线图
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(sorted_ratings.index, sorted_ratings.values, marker='o')
+    ax.set_xlabel('评分')
+    ax.set_ylabel('评价人数')
+    ax.set_title('豆瓣电影Top 250评价人数随评分变化')
+    ax.grid(True)
+    plt.savefig('images/豆瓣电影Top 250评价人数随评分变化.png')
+    plt.show()
+
+    #3. 绘制评分柱状图
+    #print(rating_counts)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(sorted_ratings.values,sorted_ratings.index,ec='r',ls='--',lw=1)
+    ax.set_ylabel('评分')
+    ax.set_xlabel('评价人数')
+    ax.set_title('豆瓣电影Top 250评价人数及评分柱状图展示')
+    ax.grid(True)
+    plt.savefig('images/豆瓣电影Top 250评价人数及评分柱状图展示.png')
+    plt.show()
+
+def main():
+    getmovie()
+    datavisualization()
+
+if __name__ == '__main__':
+    main()
